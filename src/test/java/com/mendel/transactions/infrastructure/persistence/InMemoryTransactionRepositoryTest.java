@@ -92,13 +92,13 @@ class InMemoryTransactionRepositoryTest {
     class FindIdsByType {
 
         @Test
-        @DisplayName("returns the identifiers of that type in insertion order")
-        void returnsIdentifiersInInsertionOrder() {
+        @DisplayName("returns the identifiers of that type in ascending order, whatever the write order")
+        void returnsIdentifiersInAscendingOrder() {
             repository.save(new Transaction(30L, 1.0, "shopping", null));
             repository.save(new Transaction(10L, 5000.0, "cars", null));
             repository.save(new Transaction(20L, 2.0, "shopping", null));
 
-            assertThat(repository.findIdsByType("shopping")).containsExactly(30L, 20L);
+            assertThat(repository.findIdsByType("shopping")).containsExactly(20L, 30L);
             assertThat(repository.findIdsByType("cars")).containsExactly(10L);
         }
 
@@ -152,12 +152,12 @@ class InMemoryTransactionRepositoryTest {
     class FindChildIds {
 
         @Test
-        @DisplayName("returns the direct children in insertion order")
+        @DisplayName("returns the direct children in ascending order")
         void returnsDirectChildren() {
             repository.save(new Transaction(10L, 5000.0, "cars", null));
+            repository.save(new Transaction(13L, 1.0, "shopping", 10L));
             repository.save(new Transaction(11L, 10000.0, "shopping", 10L));
             repository.save(new Transaction(12L, 5000.0, "shopping", 11L));
-            repository.save(new Transaction(13L, 1.0, "shopping", 10L));
 
             assertThat(repository.findChildIds(10L)).containsExactly(11L, 13L);
             assertThat(repository.findChildIds(11L)).containsExactly(12L);

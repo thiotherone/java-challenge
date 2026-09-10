@@ -23,10 +23,10 @@ public interface TransactionRepository {
 
     boolean existsById(long id);
 
-    /** @return identifiers of every transaction of that exact type, in insertion order. */
+    /** @return identifiers of every transaction of that exact type, in ascending order. */
     List<Long> findIdsByType(String type);
 
-    /** @return identifiers of the direct children of that transaction, in insertion order. */
+    /** @return identifiers of the direct children of that transaction, in ascending order. */
     List<Long> findChildIds(long parentId);
 
     /** Removes every transaction. Primarily a test seam for the in-memory store. */
