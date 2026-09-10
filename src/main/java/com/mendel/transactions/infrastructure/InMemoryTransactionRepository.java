@@ -23,15 +23,19 @@ import org.springframework.stereotype.Repository;
  *
  * <h2>Concurrency</h2>
  *
- * <p>Every structure is concurrent, so there is no global lock and writes to different identifiers
- * never contend. The index entries are {@link ConcurrentSkipListSet}s: thread safe and naturally
- * sorted, so both queries return identifiers in ascending order with no sorting on read and no
- * synchronized block anywhere.
+ * <p>Every structure is concurrent, so there is no global lock: writes to different identifiers
+ * only meet when they touch the same index entry, and then only for the moment it takes to update
+ * it. The index entries are {@link ConcurrentSkipListSet}s: thread safe and naturally sorted, so
+ * both queries return identifiers in ascending order with no sorting on read and no synchronized
+ * block anywhere.
  *
  * <p>A write does its whole index maintenance inside {@code byId.compute(...)}. {@link
  * ConcurrentHashMap} holds that key's bin for the duration of the mapping function, so "drop the
  * previous transaction from its old type and parent entries, then add the new one" is atomic for
- * that identifier: no writer can observe a half-moved entry for it.
+ * that identifier: no writer can observe a half-moved entry for it. Each index entry is in turn
+ * only ever changed inside its own {@code compute}, so a write emptying an entry and a write to a
+ * different identifier joining it cannot interleave. Locks are always taken in the same order, the
+ * identifier first and an index entry second, so nesting them cannot deadlock.
  *
  * <p>What this deliberately does not provide is a transactional snapshot across all three maps: a
  * sum traversal running concurrently with writes may observe a tree that changed under it. That is
@@ -126,8 +130,17 @@ public class InMemoryTransactionRepository implements TransactionRepository {
         }
     }
 
+    /**
+     * Adds the identifier inside the entry's own {@code compute}, never after it returns: {@link
+     * #remove} may drop the entry as soon as it empties, and an add made to the set outside that
+     * key's bin could land in a set the map no longer holds, losing the identifier from the index.
+     */
     private static <K> void add(Map<K, NavigableSet<Long>> index, K key, long id) {
-        index.computeIfAbsent(key, unused -> new ConcurrentSkipListSet<>()).add(id);
+        index.compute(key, (unused, ids) -> {
+            NavigableSet<Long> entry = ids == null ? new ConcurrentSkipListSet<>() : ids;
+            entry.add(id);
+            return entry;
+        });
     }
 
     /** Drops the identifier, and the whole entry once it is empty, so unused keys do not accumulate. */

@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **98 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **99 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -337,7 +337,17 @@ it is not well defined, while ascending order is deterministic and reproducible.
 A write does its whole index maintenance inside `byId.compute(...)`. `ConcurrentHashMap` holds that
 key's bin for the duration of the mapping function, so "drop the previous transaction from its old
 type and parent entries, then add the new one" is atomic *for that identifier*, while writes to
-different identifiers never contend.
+different identifiers only meet when they touch the same index entry, and then only for as long as
+updating it takes.
+
+Each index entry is itself only ever changed inside its own `compute`, for adds as well as removes.
+That detail is load-bearing. The first version added with `computeIfAbsent(key, ...).add(id)`,
+which does the add *after* the map has let go of the key. A removal that emptied the entry could
+drop it from the map in between, and the add then landed in a set the map no longer held: the
+transaction was stored, but missing from its type's list. The service's `synchronized` write path
+meant HTTP could never trigger it, but the store claimed to be safe for concurrent writers on its
+own, and it was not. A stress test in `InMemoryTransactionRepositoryTest` hit it on every run, and
+now holds the fix.
 
 #### Why concurrent collections and not a lock
 
@@ -360,7 +370,8 @@ The store was first written the other way, with a `ReentrantReadWriteLock` guard
   exclusion than the invariant requires, and charges every reader for it.
 - **It keeps the option open.** If the service's global `synchronized` were ever narrowed to
   per-subtree locking, the store already supports concurrent writers to different identifiers with
-  no change. A global lock in the store would have to be dismantled first.
+  no change, and the store's own tests exercise exactly that, with no service lock in front. A
+  global lock in the store would have to be dismantled first.
 
 The cost is real and worth naming: a lock could have given a whole `sum` traversal one consistent
 snapshot, and the concurrent maps cannot. We judged that not worth blocking every read for — see

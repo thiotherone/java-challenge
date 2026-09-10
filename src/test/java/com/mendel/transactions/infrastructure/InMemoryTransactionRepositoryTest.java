@@ -259,5 +259,52 @@ class InMemoryTransactionRepositoryTest {
             IntStream.range(0, writes)
                     .forEach(i -> assertThat(repository.existsById(i)).isTrue());
         }
+
+        /*
+         * The race this pins: one write empties an index entry and drops it, while a write to a
+         * different identifier adds to that same entry. If the add lands in the set after it was
+         * dropped from the map, the identifier is stored but missing from the index. Each round
+         * gets its own type so every removal empties its entry, and the two writes of a round are
+         * submitted back to back so they tend to run at the same moment. One round rarely hits the
+         * window; thousands of them do, reliably, against an index that adds outside the entry's
+         * own compute.
+         */
+        @Test
+        @DisplayName("never loses an identifier that joins an index entry another write is emptying")
+        void neverLosesAnIdentifierJoiningAnEntryBeingEmptied() throws Exception {
+            int rounds = 20_000;
+            IntStream.range(0, rounds)
+                    .forEach(r -> repository.save(new Transaction(leaving(r), 1.0, "type-" + r, null)));
+
+            try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
+                List<Callable<SaveResult>> tasks = IntStream.range(0, rounds)
+                        .boxed()
+                        .<Callable<SaveResult>>mapMulti((r, next) -> {
+                            next.accept(() -> repository.save(
+                                    new Transaction(leaving(r), 1.0, "elsewhere", null)));
+                            next.accept(() -> repository.save(
+                                    new Transaction(joining(r), 1.0, "type-" + r, null)));
+                        })
+                        .toList();
+
+                pool.invokeAll(tasks);
+                pool.shutdown();
+                assertThat(pool.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
+            }
+
+            List<Long> lost = IntStream.range(0, rounds)
+                    .filter(r -> !repository.findIdsByType("type-" + r).equals(List.of(joining(r))))
+                    .mapToObj(r -> joining(r))
+                    .toList();
+            assertThat(lost).isEmpty();
+        }
+
+        private static long leaving(int round) {
+            return 2L * round;
+        }
+
+        private static long joining(int round) {
+            return 2L * round + 1;
+        }
     }
 }
