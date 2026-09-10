@@ -1,0 +1,11 @@
+services:
+  transactions:
+    build: .
+    image: mendel/transactions:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # The store is in memory, so the container is stateless and disposable:
+      # restarting it is the supported way to clear every transaction.
+      SPRING_PROFILES_ACTIVE: default
+    restart: unless-stopped
