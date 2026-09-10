@@ -83,15 +83,17 @@ class TransactionHttpEndToEndTest {
     void servesErrorContract() {
         client.get().uri("/transactions/sum/404").exchange()
                 .expectStatus().isNotFound()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)
                 .expectBody()
-                .jsonPath("$.error").isEqualTo("TRANSACTION_NOT_FOUND")
-                .jsonPath("$.message").exists();
+                .jsonPath("$.type").isEqualTo("urn:mendel:transactions:transaction-not-found")
+                .jsonPath("$.status").isEqualTo(404)
+                .jsonPath("$.detail").exists();
 
         putTransaction(11, """
                 {"amount": 10000, "type": "shopping", "parent_id": 99}""")
                 .expectStatus().isEqualTo(422)
                 .expectBody()
-                .jsonPath("$.error").isEqualTo("PARENT_NOT_FOUND");
+                .jsonPath("$.type").isEqualTo("urn:mendel:transactions:parent-not-found");
     }
 
     @Test

@@ -1,9 +1,8 @@
 package com.mendel.transactions.infrastructure.web;
 
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.emptyString;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -125,8 +124,11 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"amount": 10000, "type": "shopping", "parent_id": 99}"""))
                     .andExpect(status().isUnprocessableEntity())
-                    .andExpect(jsonPath("$.error").value("PARENT_NOT_FOUND"))
-                    .andExpect(jsonPath("$.message").value(not(emptyString())));
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:parent-not-found"))
+                    .andExpect(jsonPath("$.title").value("Parent transaction not found"))
+                    .andExpect(jsonPath("$.status").value(422))
+                    .andExpect(jsonPath("$.detail").value(containsString("99")));
 
             mockMvc.perform(get("/transactions/sum/{id}", 11L))
                     .andExpect(status().isNotFound());
@@ -140,7 +142,9 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"amount": 5000, "type": "cars", "parent_id": 10}"""))
                     .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("CIRCULAR_REFERENCE"));
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:circular-reference"))
+                    .andExpect(jsonPath("$.status").value(409));
         }
 
         @Test
@@ -158,7 +162,7 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"amount": 5000, "type": "cars", "parent_id": 12}"""))
                     .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.error").value("CIRCULAR_REFERENCE"));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:circular-reference"));
 
             mockMvc.perform(get("/transactions/sum/{id}", 10L))
                     .andExpect(jsonPath("$.sum").value(20000.0));
@@ -172,8 +176,8 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"type": "cars"}"""))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
-                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("amount")));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"))
+                    .andExpect(jsonPath("$.detail").value(containsString("amount")));
         }
 
         @Test
@@ -184,14 +188,14 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"amount": 5000}"""))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+                    .andExpect(jsonPath("$.detail").value(containsString("type")));
 
             mockMvc.perform(put("/transactions/{id}", 10L)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {"amount": 5000, "type": "   "}"""))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"));
         }
 
         @Test
@@ -201,7 +205,7 @@ class TransactionApiIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{ not json"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("MALFORMED_REQUEST"));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:malformed-request"));
         }
 
         @Test
@@ -212,7 +216,7 @@ class TransactionApiIntegrationTest {
                             .content("""
                                     {"amount": 5000, "type": "cars"}"""))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"));
         }
 
         @Test
@@ -321,8 +325,11 @@ class TransactionApiIntegrationTest {
         void notFoundForUnknownTransaction() throws Exception {
             mockMvc.perform(get("/transactions/sum/{id}", 404L))
                     .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.error").value("TRANSACTION_NOT_FOUND"))
-                    .andExpect(jsonPath("$.message").value(not(emptyString())));
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:transaction-not-found"))
+                    .andExpect(jsonPath("$.title").value("Transaction not found"))
+                    .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.detail").value(containsString("404")));
         }
 
         @Test
@@ -330,7 +337,7 @@ class TransactionApiIntegrationTest {
         void rejectsNonNumericIdentifier() throws Exception {
             mockMvc.perform(get("/transactions/sum/{id}", "abc"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"));
         }
     }
 }
