@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **90 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **92 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -210,6 +210,35 @@ concurrent conditional creates cannot both find the identifier free.
 The one deviation from the specification's literal examples is the `201` on create where it prints
 a bare `{"status":"ok"}`. The body is unchanged; only the status code is more specific.
 
+### Yes, a PUT may change `parent_id`
+
+This follows directly from PUT replacing rather than patching, and it is worth stating outright
+because it is the reason cycle detection exists at all.
+
+```bash
+# 10 <- 11 <- 12, and a separate root 20
+curl localhost:8080/transactions/sum/10        # {"sum":20000.0}
+
+# move 11 (and everything under it) from 10 to 20, changing its type in the same write
+curl -X PUT localhost:8080/transactions/11 -H 'Content-Type: application/json' \
+  -d '{"amount":10000,"type":"cars","parent_id":20}'                         # 200
+
+curl localhost:8080/transactions/sum/10        # {"sum":5000.0}
+curl localhost:8080/transactions/sum/20        # {"sum":15001.0}
+curl localhost:8080/transactions/types/cars    # [10,11,20]
+```
+
+Note that 12 was never mentioned in that request, but it hangs off 11 and so travels with it: links
+are stored on the child, so moving a transaction moves its whole subtree, and both sums change to
+match. The type index is re-maintained in the same write.
+
+**The sharp edge:** because PUT carries the *complete* new state, omitting `parent_id` means "this
+transaction has no parent", not "leave its parent alone". A client that re-sends a transaction
+without the field will silently detach it, and its subtree with it. That is correct PUT semantics
+and both cases are pinned by tests, but it is the behaviour most likely to surprise. Partial updates
+are what `PATCH` is for, and this service deliberately does not offer one — there is no half-update
+in the specification, and inventing one would add a second way to write with different rules.
+
 ### A missing parent is 422, not 404
 
 `404` on `PUT /transactions/11` would say *the target URI* does not exist — but that resource is
@@ -283,6 +312,33 @@ A write does its whole index maintenance inside `byId.compute(...)`. `Concurrent
 key's bin for the duration of the mapping function, so "drop the previous transaction from its old
 type and parent entries, then add the new one" is atomic *for that identifier*, while writes to
 different identifiers never contend.
+
+#### Why concurrent collections and not a lock
+
+The store was first written the other way, with a `ReentrantReadWriteLock` guarding three plain
+`HashMap`s, and then changed. The reasoning for the change:
+
+- **A lock would protect against the wrong thing.** Writes are *already* serialized upstream:
+  `DefaultTransactionService.save` is `synchronized`, because validating a parent link and storing
+  it must be one step. Only one writer is ever in the store. So a write lock guards against a
+  second writer that cannot exist, and the contention that actually matters is readers against that
+  one writer.
+- **A read-write lock makes every reader wait for the in-flight write.** `GET /sum` and
+  `GET /types` are the operations a service like this serves constantly, and a subtree traversal is
+  not instantaneous. Under the lock, each of those blocks whenever a PUT is mid-flight, and each
+  PUT waits for readers to drain. With `ConcurrentHashMap`, readers never block and never take a
+  lock at all.
+- **The atomicity actually needed is per-identifier, not global.** The only compound operation is
+  "move one identifier between index entries", and `byId.compute` scopes exactly that — the map
+  holds that one key's bin for the mapping function. A global lock supplies far more mutual
+  exclusion than the invariant requires, and charges every reader for it.
+- **It keeps the option open.** If the service's global `synchronized` were ever narrowed to
+  per-subtree locking, the store already supports concurrent writers to different identifiers with
+  no change. A global lock in the store would have to be dismantled first.
+
+The cost is real and worth naming: a lock could have given a whole `sum` traversal one consistent
+snapshot, and the concurrent maps cannot. We judged that not worth blocking every read for — see
+immediately below.
 
 **The trade-off, stated plainly:** this gives per-key atomicity, not a transactional snapshot across
 all three maps. A `sum` traversal running concurrently with writes may observe a tree that changed

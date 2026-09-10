@@ -154,6 +154,63 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("a replacement may change parent_id, moving the subtree and both sums with it")
+        void replacementMayChangeParent() throws Exception {
+            givenTransaction(10L, """
+                    {"amount": 5000, "type": "cars"}""");
+            givenTransaction(11L, """
+                    {"amount": 10000, "type": "shopping", "parent_id": 10}""");
+            givenTransaction(12L, """
+                    {"amount": 5000, "type": "shopping", "parent_id": 11}""");
+            givenTransaction(20L, """
+                    {"amount": 1, "type": "cars"}""");
+
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(20000.0));
+
+            // Move 11 from under 10 to under 20, changing its type in the same write.
+            mockMvc.perform(put("/transactions/{id}", 11L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 10000, "type": "cars", "parent_id": 20}"""))
+                    .andExpect(status().isOk());
+
+            // 12 was never mentioned, but it hangs off 11 and so travels with it.
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(5000.0));
+            mockMvc.perform(get("/transactions/sum/{id}", 20L))
+                    .andExpect(jsonPath("$.sum").value(15001.0));
+
+            // The type index moved too.
+            mockMvc.perform(get("/transactions/types/{type}", "cars"))
+                    .andExpect(content().json("[10,11,20]", true));
+            mockMvc.perform(get("/transactions/types/{type}", "shopping"))
+                    .andExpect(content().json("[12]", true));
+        }
+
+        @Test
+        @DisplayName("omitting parent_id on a replacement detaches the transaction into a root")
+        void omittingParentDetaches() throws Exception {
+            givenTransaction(10L, """
+                    {"amount": 5000, "type": "cars"}""");
+            givenTransaction(11L, """
+                    {"amount": 10000, "type": "shopping", "parent_id": 10}""");
+
+            // PUT carries the complete new state, so an absent parent_id means "no parent",
+            // not "leave the parent alone".
+            mockMvc.perform(put("/transactions/{id}", 11L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 10000, "type": "shopping"}"""))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(5000.0));
+            mockMvc.perform(get("/transactions/sum/{id}", 11L))
+                    .andExpect(jsonPath("$.sum").value(10000.0));
+        }
+
+        @Test
         @DisplayName("422 when parent_id references a transaction that does not exist")
         void rejectsMissingParent() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 11L)
