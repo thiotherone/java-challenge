@@ -128,6 +128,25 @@ The total of the transaction itself plus everything transitively linked to it **
 `sum/10` is `20000` while `sum/11` is `15000` in the example above. `404` if the transaction does
 not exist.
 
+**Amounts and sums are `double` because the specification types them that way — not because
+`double` suits money.** Binary floating point cannot represent most decimal fractions exactly, and
+the error surfaces as soon as cents are added up:
+
+```bash
+curl -X PUT localhost:8080/transactions/1 -H 'Content-Type: application/json' \
+  -d '{"amount":0.1,"type":"x"}'
+curl -X PUT localhost:8080/transactions/2 -H 'Content-Type: application/json' \
+  -d '{"amount":0.2,"type":"x","parent_id":1}'
+curl localhost:8080/transactions/sum/1        # {"sum":0.30000000000000004}
+```
+
+Whole amounts like the ones in the specification's example never show it. In a service that
+handles real money the amount would be a `BigDecimal` end to end, stored, summed and serialized as
+one, so that `0.1 + 0.2` is exactly `0.3`. The change is contained: `Transaction.amount`, the two
+DTOs that carry an amount, and the accumulator in `DefaultTransactionService.sumLinkedTo`. It was
+not made here because it would change the wire types the specification fixes, and the contract
+comes first.
+
 ### Errors
 
 Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details, served as
