@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
@@ -90,7 +89,7 @@ class TransactionHttpEndToEndTest {
 
         putTransaction(11, """
                 {"amount": 10000, "type": "shopping", "parent_id": 99}""")
-                .expectStatus().isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY)
+                .expectStatus().isEqualTo(422)
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("PARENT_NOT_FOUND");
     }
