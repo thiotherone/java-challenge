@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **99 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **100 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -52,13 +52,13 @@ Stores a transaction under a client-chosen identifier.
 |---|---|---|---|
 | `amount` | double | yes | Must be greater than zero, and finite |
 | `type` | string | yes | Must not be blank; matched exactly, case included |
-| `parent_id` | long | no | Must reference an existing transaction |
+| `parent_id` | long | no | Must be a whole number that references an existing transaction |
 
 | Status | When |
 |---|---|
 | `201 Created` | The identifier was free. Carries `Location: /transactions/{id}` |
 | `200 OK` | The identifier was in use; the transaction was replaced |
-| `400 Bad Request` | Malformed JSON, missing `amount`, an `amount` that is not positive, blank `type`, non-numeric identifier |
+| `400 Bad Request` | Malformed JSON, a field of the wrong type (such as a fractional `parent_id`), missing `amount`, an `amount` that is not positive, blank `type`, non-numeric identifier |
 | `405 Method Not Allowed` | A verb the resource does not support, such as `POST` |
 | `409 Conflict` | The parent link would make the transaction its own ancestor |
 | `412 Precondition Failed` | `If-None-Match: *` was sent and the identifier is already in use |
@@ -83,10 +83,13 @@ curl -X PUT localhost:8080/transactions/1 -H 'Content-Type: application/json' \
 | `0`, `-0.01`, `-5000.5` | `400` `amount must be greater than zero` | `validation-error` |
 | `null`, or the field absent | `400` `amount is required` | `validation-error` |
 | `1e400` | `400` `amount must be a finite number, but was Infinity` | `validation-error` |
-| `NaN`, `"abc"` | `400` `the request body is not valid JSON` | `malformed-request` |
+| `"abc"` | `400` `amount must be a number` | `malformed-request` |
+| `NaN` | `400` `the request body is not valid JSON` | `malformed-request` |
 
-The last two rows are the ones worth noticing. `NaN` is not legal JSON, so it never reaches
-validation at all — the parser refuses it and it surfaces as a malformed body. `1e400` *is* legal
+The last three rows are the ones worth noticing. `"abc"` and `NaN` never reach validation at all:
+the body cannot be read into a transaction, so both surface as a malformed request. The difference
+is that `"abc"` is legal JSON of the wrong type, so the answer can name the field, while `NaN` is
+not legal JSON, so the parser gives up before any field is involved. `1e400` *is* legal
 JSON, overflows silently to `Infinity` when parsed as a `double`, and is caught by the finiteness
 check in the `Transaction` constructor. That check is not defensive dead code: this is the request
 that reaches it.
@@ -400,6 +403,12 @@ a cycle between them. It is the only write path into the store, so serializing i
   would otherwise slip past `amount <= 0`.
 - **`parent_id` is mapped with an explicit `@JsonProperty`**, not a global snake_case strategy, so
   one field's naming does not change serialization everywhere.
+- **A fractional `parent_id` is refused, not truncated.** Jackson's default is to accept `10.9` for
+  a `long` and drop the fraction, which would silently link the transaction under `10`, a parent the
+  client never named. `spring.jackson.deserialization.accept-float-as-int=false` turns that off,
+  so `10.9` answers `400` `parent_id must be a whole number`. `10.0` is refused too: the
+  specification types the field as `long`, and an identifier written as a decimal is more likely a
+  client bug than an intent.
 - **`amount` must be strictly greater than zero.** Negative, zero, `NaN` and infinity are all
   rejected with `400`. This forecloses modelling an outflow as a negative inflow, so a refund is its
   own transaction of a refund `type` rather than a sign flip; a service that later needs signed

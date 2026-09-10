@@ -17,6 +17,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 /**
  * Translates domain and binding failures into RFC 9457 problem details.
@@ -81,7 +83,36 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException exception) {
         return problem(HttpStatus.BAD_REQUEST, "Malformed request", "malformed-request",
-                "the request body is not valid JSON");
+                describeUnreadable(exception));
+    }
+
+    /**
+     * Names the offending field when the body is valid JSON that does not fit a transaction, such as
+     * a parent_id of 10.9, so the client is not told its JSON is broken when it is not.
+     */
+    private static String describeUnreadable(HttpMessageNotReadableException exception) {
+        for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+                return field(mismatch) + " must be " + expected(mismatch.getTargetType());
+            }
+        }
+        return "the request body is not valid JSON";
+    }
+
+    private static String field(MismatchedInputException mismatch) {
+        return mismatch.getPath().stream()
+                .map(JacksonException.Reference::getPropertyName)
+                .collect(Collectors.joining("."));
+    }
+
+    private static String expected(Class<?> type) {
+        if (type == Long.class || type == long.class) {
+            return "a whole number";
+        }
+        if (type == Double.class || type == double.class) {
+            return "a number";
+        }
+        return type == null ? "of a different type" : "a " + type.getSimpleName().toLowerCase(Locale.ROOT);
     }
 
     /**

@@ -231,6 +231,27 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("400 when parent_id is not a whole number, rather than truncating it onto another parent")
+        void rejectsFractionalParentId() throws Exception {
+            givenTransaction(10L, """
+                    {"amount": 5000, "type": "cars"}""");
+
+            mockMvc.perform(put("/transactions/{id}", 11L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 1, "type": "shopping", "parent_id": 10.9}"""))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:malformed-request"))
+                    .andExpect(jsonPath("$.detail").value("parent_id must be a whole number"));
+
+            // Truncated, 10.9 would have become 10 and silently linked 11 under it.
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(5000.0));
+            mockMvc.perform(get("/transactions/sum/{id}", 11L))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
         @DisplayName("409 when a transaction would become its own parent")
         void rejectsSelfParent() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 10L)
