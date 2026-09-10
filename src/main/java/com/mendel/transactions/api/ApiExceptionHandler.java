@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
 
 /**
  * Translates domain and binding failures into RFC 9457 problem details.
@@ -88,10 +89,14 @@ public class ApiExceptionHandler {
 
     /**
      * Names the offending field when the body is valid JSON that does not fit a transaction, such as
-     * a parent_id of 10.9, so the client is not told its JSON is broken when it is not.
+     * a parent_id of 10.9 or a misspelt parentId, so the client is not told its JSON is broken when
+     * it is not.
      */
     private static String describeUnreadable(HttpMessageNotReadableException exception) {
         for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof UnrecognizedPropertyException unknown) {
+                return "unknown field '" + unknown.getPropertyName() + "'";
+            }
             if (cause instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
                 return field(mismatch) + " must be " + expected(mismatch.getTargetType());
             }

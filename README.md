@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **100 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **101 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -58,7 +58,7 @@ Stores a transaction under a client-chosen identifier.
 |---|---|
 | `201 Created` | The identifier was free. Carries `Location: /transactions/{id}` |
 | `200 OK` | The identifier was in use; the transaction was replaced |
-| `400 Bad Request` | Malformed JSON, a field of the wrong type (such as a fractional `parent_id`), missing `amount`, an `amount` that is not positive, blank `type`, non-numeric identifier |
+| `400 Bad Request` | Malformed JSON, an unknown field (such as `parentId`), a field of the wrong type (such as a fractional `parent_id`), missing `amount`, an `amount` that is not positive, blank `type`, non-numeric identifier |
 | `405 Method Not Allowed` | A verb the resource does not support, such as `POST` |
 | `409 Conflict` | The parent link would make the transaction its own ancestor |
 | `412 Precondition Failed` | `If-None-Match: *` was sent and the identifier is already in use |
@@ -409,6 +409,13 @@ a cycle between them. It is the only write path into the store, so serializing i
   so `10.9` answers `400` `parent_id must be a whole number`. `10.0` is refused too: the
   specification types the field as `long`, and an identifier written as a decimal is more likely a
   client bug than an intent.
+- **An unknown field is refused, not ignored.** Spring Boot configures Jackson to skip fields it
+  does not recognise, so `"parentId": 10` in camelCase used to answer `201` and store a root: the
+  misspelt link was dropped, and the transaction detached from the parent the client meant, with
+  nothing to say so. That is the same sharp edge as omitting `parent_id` on a replacement, reached
+  by a typo. With `spring.jackson.deserialization.fail-on-unknown-properties=true` it answers `400`
+  `unknown field 'parentId'`. The cost is that a client cannot send extra fields and expect them to
+  be ignored, which for a three-field body is a fair trade.
 - **`amount` must be strictly greater than zero.** Negative, zero, `NaN` and infinity are all
   rejected with `400`. This forecloses modelling an outflow as a negative inflow, so a refund is its
   own transaction of a refund `type` rather than a sign flip; a service that later needs signed

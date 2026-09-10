@@ -252,6 +252,27 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("400 for a field a transaction does not have, such as parentId in camelCase")
+        void rejectsUnknownField() throws Exception {
+            givenTransaction(10L, """
+                    {"amount": 5000, "type": "cars"}""");
+
+            mockMvc.perform(put("/transactions/{id}", 11L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 1, "type": "shopping", "parentId": 10}"""))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:malformed-request"))
+                    .andExpect(jsonPath("$.detail").value("unknown field 'parentId'"));
+
+            // Ignored, the misspelt link would have stored 11 as a root with no parent at all.
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(5000.0));
+            mockMvc.perform(get("/transactions/sum/{id}", 11L))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
         @DisplayName("409 when a transaction would become its own parent")
         void rejectsSelfParent() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 10L)
