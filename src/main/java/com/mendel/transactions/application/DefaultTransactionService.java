@@ -5,6 +5,7 @@ import com.mendel.transactions.domain.Transaction;
 import com.mendel.transactions.domain.TransactionRepository;
 import com.mendel.transactions.domain.exception.CircularReferenceException;
 import com.mendel.transactions.domain.exception.ParentNotFoundException;
+import com.mendel.transactions.domain.exception.TransactionAlreadyExistsException;
 import com.mendel.transactions.domain.exception.TransactionNotFoundException;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -41,6 +42,23 @@ public class DefaultTransactionService implements TransactionCommandService, Tra
     @Override
     public synchronized SaveResult save(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction must not be null");
+        transaction.parent().ifPresent(parentId -> validateParent(transaction.id(), parentId));
+        return repository.save(transaction);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Synchronized for the same reason as {@link #save(Transaction)}, and here it additionally
+     * makes "is the identifier free?" and the write itself one step, so two concurrent conditional
+     * creates cannot both find the identifier free.
+     */
+    @Override
+    public synchronized SaveResult create(Transaction transaction) {
+        Objects.requireNonNull(transaction, "transaction must not be null");
+        if (repository.existsById(transaction.id())) {
+            throw new TransactionAlreadyExistsException(transaction.id());
+        }
         transaction.parent().ifPresent(parentId -> validateParent(transaction.id(), parentId));
         return repository.save(transaction);
     }

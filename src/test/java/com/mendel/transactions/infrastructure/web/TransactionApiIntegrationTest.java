@@ -117,6 +117,43 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("412 when If-None-Match: * asks to create and the identifier is taken")
+        void refusesToReplaceUnderIfNoneMatch() throws Exception {
+            givenTransaction(10L, """
+                    {"amount": 5000, "type": "cars"}""");
+
+            mockMvc.perform(put("/transactions/{id}", 10L)
+                            .header("If-None-Match", "*")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 99, "type": "food"}"""))
+                    .andExpect(status().isPreconditionFailed())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type")
+                            .value("urn:mendel:transactions:transaction-already-exists"))
+                    .andExpect(jsonPath("$.status").value(412));
+
+            // The refused write must leave the stored transaction untouched.
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(jsonPath("$.sum").value(5000.0));
+            mockMvc.perform(get("/transactions/types/{type}", "cars"))
+                    .andExpect(content().json("[10]", true));
+        }
+
+        @Test
+        @DisplayName("201 when If-None-Match: * asks to create and the identifier is free")
+        void createsUnderIfNoneMatchWhenFree() throws Exception {
+            mockMvc.perform(put("/transactions/{id}", 10L)
+                            .header("If-None-Match", "*")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 5000, "type": "cars"}"""))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", "/transactions/10"))
+                    .andExpect(jsonPath("$.status").value("ok"));
+        }
+
+        @Test
         @DisplayName("422 when parent_id references a transaction that does not exist")
         void rejectsMissingParent() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 11L)

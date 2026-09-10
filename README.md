@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **79 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **87 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -60,10 +60,24 @@ Stores a transaction under a client-chosen identifier.
 | `200 OK` | The identifier was in use; the transaction was replaced |
 | `400 Bad Request` | Malformed JSON, missing `amount`, blank `type`, non-numeric identifier |
 | `409 Conflict` | The parent link would make the transaction its own ancestor |
+| `412 Precondition Failed` | `If-None-Match: *` was sent and the identifier is already in use |
 | `415 Unsupported Media Type` | The body is not JSON |
 | `422 Unprocessable Content` | `parent_id` references a transaction that does not exist |
 
+| `405 Method Not Allowed` | A verb the resource does not support, such as `POST` |
+
 Both success cases answer with the body the specification prescribes: `{"status":"ok"}`.
+
+**Create without replacing.** A client that must not overwrite an existing transaction says so with
+a conditional request rather than a different endpoint:
+
+```bash
+curl -X PUT localhost:8080/transactions/10 -H 'If-None-Match: *' \
+  -H 'Content-Type: application/json' -d '{"amount":99,"type":"food"}'   # 412 if 10 exists
+```
+
+Any other `If-None-Match` value is an entity-tag list. This service issues no ETags, so nothing can
+match one, the precondition passes, and the write proceeds as a normal PUT.
 
 ### `GET /transactions/types/{type}`
 
@@ -161,9 +175,13 @@ replaced and answered `200`. Both carry the prescribed body.
 
 Rejecting re-use with `409` would have been simpler — it makes the store append-only, so every new
 transaction is a leaf and cycles become impossible by construction. We chose not to buy that
-simplicity by bending the verb. A client that genuinely wants create-only semantics has a standard
-way to ask: `If-None-Match: *`, answered `412`. That is a natural extension of this design rather
-than a change to it.
+simplicity by bending the verb, because it would also take the choice away from the client.
+
+Instead the choice is the client's, expressed the standard way
+([RFC 9110 §13.1.2](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.2)): sending
+`If-None-Match: *` means "create, never replace", and the service answers `412 Precondition Failed`
+if the identifier is taken. The check and the write happen inside the same synchronized step, so two
+concurrent conditional creates cannot both find the identifier free.
 
 The one deviation from the specification's literal examples is the `201` on create where it prints
 a bare `{"status":"ok"}`. The body is unchanged; only the status code is more specific.
@@ -247,6 +265,11 @@ a cycle between them. It is the only write path into the store, so serializing i
 - **A negative `amount` is valid** — a transaction may be an outflow. `NaN` and infinity are not.
 - **`deleteAll()` is on the port.** It is a legitimate repository operation and the seam that lets
   integration tests reset a store that otherwise lives as long as the process.
+- **`SaveResult` exists so the adapter can answer accurately.** The store is the only component
+  that knows whether an identifier was free; returning `CREATED` or `REPLACED` is what lets the
+  controller choose `201` or `200` without asking a second question and racing the answer.
+- **The write side has two methods, not a boolean.** `save` replaces and `create` refuses to; a
+  `save(transaction, createOnly)` flag would have hidden two behaviours behind one name.
 
 ---
 

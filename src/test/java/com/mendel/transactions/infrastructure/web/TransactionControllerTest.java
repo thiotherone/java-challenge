@@ -16,6 +16,7 @@ import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;
 import com.mendel.transactions.domain.exception.CircularReferenceException;
 import com.mendel.transactions.domain.exception.ParentNotFoundException;
+import com.mendel.transactions.domain.exception.TransactionAlreadyExistsException;
 import com.mendel.transactions.domain.exception.TransactionNotFoundException;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -88,6 +89,52 @@ class TransactionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().doesNotExist("Location"))
                 .andExpect(jsonPath("$.status").value("ok"));
+    }
+
+    @Test
+    @DisplayName("If-None-Match: * routes the write to create rather than replace")
+    void ifNoneMatchStarRoutesToCreate() throws Exception {
+        when(commandService.create(any())).thenReturn(SaveResult.CREATED);
+
+        mockMvc.perform(put("/transactions/{id}", 10L)
+                        .header("If-None-Match", "*")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 5000, "type": "cars"}"""))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/transactions/10"));
+
+        org.mockito.Mockito.verify(commandService, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a taken identifier under If-None-Match: * becomes 412")
+    void alreadyExistsBecomes412() throws Exception {
+        when(commandService.create(any())).thenThrow(new TransactionAlreadyExistsException(10L));
+
+        mockMvc.perform(put("/transactions/{id}", 10L)
+                        .header("If-None-Match", "*")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 5000, "type": "cars"}"""))
+                .andExpect(status().isPreconditionFailed())
+                .andExpect(jsonPath("$.type")
+                        .value("urn:mendel:transactions:transaction-already-exists"));
+    }
+
+    @Test
+    @DisplayName("an entity-tag If-None-Match cannot match, since no ETag is issued, so the write proceeds")
+    void entityTagIfNoneMatchProceeds() throws Exception {
+        when(commandService.save(any())).thenReturn(SaveResult.REPLACED);
+
+        mockMvc.perform(put("/transactions/{id}", 10L)
+                        .header("If-None-Match", "\"some-etag\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 5000, "type": "cars"}"""))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.verify(commandService, org.mockito.Mockito.never()).create(any());
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.mendel.transactions.infrastructure.web;
 
 import com.mendel.transactions.domain.exception.CircularReferenceException;
 import com.mendel.transactions.domain.exception.ParentNotFoundException;
+import com.mendel.transactions.domain.exception.TransactionAlreadyExistsException;
 import com.mendel.transactions.domain.exception.TransactionException;
 import com.mendel.transactions.domain.exception.TransactionNotFoundException;
 import java.net.URI;
@@ -50,6 +51,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ParentNotFoundException.class)
     public ProblemDetail handleParentNotFound(ParentNotFoundException exception) {
         return problem(HttpStatus.UNPROCESSABLE_CONTENT, "Parent transaction not found", exception);
+    }
+
+    @ExceptionHandler(TransactionAlreadyExistsException.class)
+    public ProblemDetail handleTransactionAlreadyExists(TransactionAlreadyExistsException exception) {
+        return problem(HttpStatus.PRECONDITION_FAILED, "Transaction already exists", exception);
     }
 
     @ExceptionHandler(CircularReferenceException.class)

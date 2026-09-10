@@ -15,6 +15,7 @@ import com.mendel.transactions.domain.Transaction;
 import com.mendel.transactions.domain.TransactionRepository;
 import com.mendel.transactions.domain.exception.CircularReferenceException;
 import com.mendel.transactions.domain.exception.ParentNotFoundException;
+import com.mendel.transactions.domain.exception.TransactionAlreadyExistsException;
 import com.mendel.transactions.domain.exception.TransactionNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -174,6 +175,49 @@ class DefaultTransactionServiceTest {
         void rejectsNull() {
             assertThatThrownBy(() -> service.save(null)).isInstanceOf(NullPointerException.class);
             verify(repository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("create")
+    class Create {
+
+        @Test
+        @DisplayName("stores the transaction when the identifier is free")
+        void storesWhenIdentifierIsFree() {
+            givenStored();
+            Transaction root = new Transaction(10L, 5000.0, "cars", null);
+            when(repository.save(root)).thenReturn(SaveResult.CREATED);
+
+            assertThat(service.create(root)).isEqualTo(SaveResult.CREATED);
+            verify(repository).save(root);
+        }
+
+        @Test
+        @DisplayName("refuses to replace an identifier that is already in use")
+        void refusesTakenIdentifier() {
+            givenStored(new Transaction(10L, 5000.0, "cars", null));
+
+            assertThatThrownBy(() -> service.create(new Transaction(10L, 99.0, "food", null)))
+                    .isInstanceOf(TransactionAlreadyExistsException.class)
+                    .hasMessageContaining("10");
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("still validates the parent link")
+        void stillValidatesParent() {
+            givenStored();
+
+            assertThatThrownBy(() -> service.create(new Transaction(11L, 10000.0, "shopping", 99L)))
+                    .isInstanceOf(ParentNotFoundException.class);
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("rejects a null transaction")
+        void rejectsNull() {
+            assertThatThrownBy(() -> service.create(null)).isInstanceOf(NullPointerException.class);
         }
     }
 

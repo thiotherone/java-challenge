@@ -10,11 +10,13 @@ import com.mendel.transactions.infrastructure.web.dto.TransactionRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,17 +45,34 @@ public class TransactionController {
      * <p>PUT replaces, per RFC 9110: an unused identifier is created and answered with 201 and a
      * Location header, an identifier already in use is replaced and answered with 200. The body is
      * the acknowledgement the challenge specification prescribes in both cases.
+     *
+     * <p>A client that wants to create without ever replacing says so the standard way, with
+     * {@code If-None-Match: *}, and gets 412 if the identifier is taken. Any other If-None-Match
+     * value is an entity-tag list; this service issues no ETags, so nothing can match it and the
+     * precondition passes, leaving the write to proceed.
      */
     @PutMapping("/{transactionId}")
-    public ResponseEntity<StatusResponse> put(@PathVariable long transactionId,
-                                              @Valid @RequestBody TransactionRequest request) {
-        SaveResult result = commandService.save(new Transaction(
-                transactionId, request.amount(), request.type(), request.parentId()));
+    public ResponseEntity<StatusResponse> put(
+            @PathVariable long transactionId,
+            @Valid @RequestBody TransactionRequest request,
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+
+        Transaction transaction = new Transaction(
+                transactionId, request.amount(), request.type(), request.parentId());
+
+        SaveResult result = requiresAbsence(ifNoneMatch)
+                ? commandService.create(transaction)
+                : commandService.save(transaction);
 
         return result == SaveResult.CREATED
                 ? ResponseEntity.created(URI.create("/transactions/" + transactionId))
                         .body(StatusResponse.ok())
                 : ResponseEntity.ok(StatusResponse.ok());
+    }
+
+    /** @return whether the request asked to proceed only if the target resource does not exist. */
+    private static boolean requiresAbsence(String ifNoneMatch) {
+        return ifNoneMatch != null && "*".equals(ifNoneMatch.trim());
     }
 
     /** @return the identifiers of every transaction of that type; an empty array if there are none. */
