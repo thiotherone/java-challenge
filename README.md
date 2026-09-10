@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **92 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **96 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -50,7 +50,7 @@ Stores a transaction under a client-chosen identifier.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `amount` | double | yes | May be negative or zero; must be finite |
+| `amount` | double | yes | Must be greater than zero, and finite |
 | `type` | string | yes | Must not be blank; matched exactly, case included |
 | `parent_id` | long | no | Must reference an existing transaction |
 
@@ -353,10 +353,20 @@ a cycle between them. It is the only write path into the store, so serializing i
 ### Smaller decisions
 
 - **`amount` is a boxed `Double` with `@NotNull`.** A primitive `double` would silently accept a
-  missing field as `0.0`.
+  missing field as `0.0` — which, now that zero is itself invalid, would turn a missing field into a
+  confusing "must be greater than zero" instead of "amount is required".
+- **The amount rule is enforced twice, deliberately.** `@Positive` on the request DTO turns it into
+  a clean `400` naming the field, and the `Transaction` record refuses the same value in its
+  constructor. The second is not redundant: it is what makes the invariant true of the type rather
+  than of one entry point, so no future caller can construct an invalid transaction by bypassing the
+  web layer. The record checks finiteness *before* sign, since `NaN` fails every comparison and
+  would otherwise slip past `amount <= 0`.
 - **`parent_id` is mapped with an explicit `@JsonProperty`**, not a global snake_case strategy, so
   one field's naming does not change serialization everywhere.
-- **A negative `amount` is valid** — a transaction may be an outflow. `NaN` and infinity are not.
+- **`amount` must be strictly greater than zero.** Negative, zero, `NaN` and infinity are all
+  rejected with `400`. This forecloses modelling an outflow as a negative inflow, so a refund is its
+  own transaction of a refund `type` rather than a sign flip; a service that later needs signed
+  ledger entries would relax this rule rather than work around it.
 - **`deleteAll()` is on the port.** It is a legitimate repository operation and the seam that lets
   integration tests reset a store that otherwise lives as long as the process.
 - **`SaveResult` exists so the adapter can answer accurately.** The store is the only component

@@ -333,16 +333,29 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
-        @DisplayName("accepts a negative amount")
-        void acceptsNegativeAmount() throws Exception {
+        @DisplayName("400 when the amount is negative, and nothing is stored")
+        void rejectsNegativeAmount() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 10L)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {"amount": -5000.5, "type": "refund"}"""))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"))
+                    .andExpect(jsonPath("$.detail").value(containsString("amount")));
 
             mockMvc.perform(get("/transactions/sum/{id}", 10L))
-                    .andExpect(jsonPath("$.sum").value(-5000.5));
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("400 when the amount is zero")
+        void rejectsZeroAmount() throws Exception {
+            mockMvc.perform(put("/transactions/{id}", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 0, "type": "cars"}"""))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"));
         }
     }
 

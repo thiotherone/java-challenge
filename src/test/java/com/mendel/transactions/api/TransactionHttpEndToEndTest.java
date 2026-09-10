@@ -108,10 +108,10 @@ class TransactionHttpEndToEndTest {
     void handlesConcurrentWrites() throws Exception {
         int clients = 8;
         int writesPerClient = 1_000;
-        int total = clients * writesPerClient;
+        int total = clients * writesPerClient + 1;   // the root counts toward its own subtree
 
         putTransaction(0, """
-                {"amount": 0, "type": "root"}""").expectStatus().isCreated();
+                {"amount": 1, "type": "root"}""").expectStatus().isCreated();
 
         // Every identifier is distinct and every transaction hangs off the same root, so the store
         // is exercised on all three indexes at once and the root sum is a single number that only
@@ -140,7 +140,7 @@ class TransactionHttpEndToEndTest {
 
         client.get().uri("/transactions/types/concurrent").exchange()
                 .expectStatus().isOk()
-                .expectBody(ID_LIST).value(ids -> assertThat(ids).hasSize(total));
+                .expectBody(ID_LIST).value(ids -> assertThat(ids).hasSize(total - 1));
     }
 
     @Test

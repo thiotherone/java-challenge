@@ -40,16 +40,19 @@ class TransactionTest {
                     .hasMessageContaining("amount");
         }
 
-        @Test
-        @DisplayName("accepts a negative amount, since a transaction may be an outflow")
-        void acceptsNegativeAmount() {
-            assertThat(new Transaction(1L, -5000.0, "cars", null).amount()).isEqualTo(-5000.0);
+        @ParameterizedTest(name = "rejects a non-positive amount: {0}")
+        @ValueSource(doubles = {-5000.0, -0.5, -0.0, 0.0})
+        void rejectsNonPositiveAmount(double amount) {
+            assertThatThrownBy(() -> new Transaction(1L, amount, "cars", null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("amount");
         }
 
         @Test
-        @DisplayName("accepts a zero amount")
-        void acceptsZeroAmount() {
-            assertThat(new Transaction(1L, 0.0, "cars", null).amount()).isZero();
+        @DisplayName("accepts the smallest amount above zero")
+        void acceptsSmallestPositiveAmount() {
+            assertThat(new Transaction(1L, Double.MIN_VALUE, "cars", null).amount())
+                    .isEqualTo(Double.MIN_VALUE);
         }
     }
 

@@ -10,7 +10,7 @@ import java.util.Optional;
  * so it is part of the value rather than something the store assigns.
  *
  * @param id       client-chosen identifier
- * @param amount   monetary amount; may be negative, must be finite
+ * @param amount   monetary amount; must be finite and strictly greater than zero
  * @param type     non-blank classifier used by the "find by type" query
  * @param parentId identifier of the parent transaction, or {@code null} when this is a root
  */
@@ -23,6 +23,11 @@ public record Transaction(long id, double amount, String type, Long parentId) {
         }
         if (!Double.isFinite(amount)) {
             throw new IllegalArgumentException("amount must be a finite number, but was " + amount);
+        }
+        // Checked after finiteness on purpose: NaN fails every comparison, so it would slip
+        // through this one.
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount must be greater than zero, but was " + amount);
         }
     }
 
