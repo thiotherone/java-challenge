@@ -1,11 +1,18 @@
 package com.mendel.transactions.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
 import com.mendel.transactions.domain.TransactionRepository;
 import com.mendel.transactions.api.dto.StatusResponse;
 import com.mendel.transactions.api.dto.SumResponse;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -94,6 +101,46 @@ class TransactionHttpEndToEndTest {
                 .expectStatus().isEqualTo(422)
                 .expectBody()
                 .jsonPath("$.type").isEqualTo("urn:mendel:transactions:parent-not-found");
+    }
+
+    @Test
+    @DisplayName("stores every write when many clients PUT at once, and sums them correctly")
+    void handlesConcurrentWrites() throws Exception {
+        int clients = 8;
+        int writesPerClient = 1_000;
+        int total = clients * writesPerClient;
+
+        putTransaction(0, """
+                {"amount": 0, "type": "root"}""").expectStatus().isCreated();
+
+        // Every identifier is distinct and every transaction hangs off the same root, so the store
+        // is exercised on all three indexes at once and the root sum is a single number that only
+        // comes out right if no write was lost.
+        try (ExecutorService pool = Executors.newFixedThreadPool(clients)) {
+            List<Callable<Void>> tasks = IntStream.range(0, clients)
+                    .<Callable<Void>>mapToObj(client -> () -> {
+                        for (int n = 0; n < writesPerClient; n++) {
+                            long id = 1L + (long) client * writesPerClient + n;
+                            putTransaction(id, """
+                                    {"amount": 1, "type": "concurrent", "parent_id": 0}""")
+                                    .expectStatus().isCreated();
+                        }
+                        return null;
+                    })
+                    .toList();
+
+            for (Future<Void> finished : pool.invokeAll(tasks)) {
+                finished.get(2, TimeUnit.MINUTES);
+            }
+        }
+
+        client.get().uri("/transactions/sum/0").exchange()
+                .expectStatus().isOk()
+                .expectBody(SumResponse.class).isEqualTo(new SumResponse(total));
+
+        client.get().uri("/transactions/types/concurrent").exchange()
+                .expectStatus().isOk()
+                .expectBody(ID_LIST).value(ids -> assertThat(ids).hasSize(total));
     }
 
     @Test

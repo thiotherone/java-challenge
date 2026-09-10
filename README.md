@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **87 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **90 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -249,8 +249,22 @@ subtly wrong, for a read path that is already fast. Under a read-heavy productio
 trees that trade would be worth revisiting; at this scale it is not.
 
 The traversal is **iterative**, not recursive: a chain can be far deeper than the stack allows to
-recurse, and a 10,000-deep chain is in the suite to prove it. It also carries a `visited` set, so
+recurse, and a 100,000-deep chain is in the suite to prove it. It also carries a `visited` set, so
 even a malformed store cannot make it loop forever.
+
+### Only a replacement can close a cycle
+
+The cycle check walks up from the proposed parent, which costs the depth of the chain. Doing that on
+**every** write makes appending to a chain O(depth) and building one O(n²) — measurably so: a
+100,000-node chain did not finish building in 400 seconds.
+
+But a transaction that is not in the store yet has no descendants, so nothing can be a descendant of
+it, so a new identifier cannot close a cycle at all. The walk only runs when the identifier is
+already stored, which is exactly the re-parenting case that can. Appending is now O(1) and the same
+chain builds and sums in under a second.
+
+`DeepChainTest` holds this with timeouts rather than a comment, because a quadratic append passes
+every correctness assertion and simply takes forever.
 
 ### Storage: concurrent maps, per-key atomicity
 
@@ -306,9 +320,10 @@ The suite is layered, and each layer exists for something the others cannot chec
 | `TransactionTest` | Value invariants: a `Transaction` cannot be constructed invalid |
 | `InMemoryTransactionRepositoryTest` | Index consistency across replacement, detached reads, concurrent writes |
 | `DefaultTransactionServiceTest` | The rules, against a mocked port: parent validation, cycles, traversal, a 10,000-deep chain |
+| `DeepChainTest` | The service on the real store at 100,000 nodes: appending stays linear, summing does not recurse |
 | `TransactionControllerTest` | Controller slice with a mocked service: which failure becomes which status |
 | `TransactionApiIntegrationTest` | Full context, real store: the whole HTTP contract |
-| `TransactionHttpEndToEndTest` | A real server on a random port: the challenge example over the wire |
+| `TransactionHttpEndToEndTest` | A real server on a random port: the challenge example over the wire, and 8,000 concurrent PUTs from 8 clients |
 
 ```bash
 ./mvnw test
