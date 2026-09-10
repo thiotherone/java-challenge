@@ -162,6 +162,20 @@ How the SOLID principles actually show up here, rather than as a checklist:
 
 Everything below is a decision the challenge left open. Each is enforced by a test.
 
+### What "transitively linked" means
+
+The challenge asks for *"el monto total involucrado para todas las transacciónes vinculadas a una
+transacción en particular"*, and `sum` is *"la suma de todas las transacciones que estan
+transitivamente conectadas por su parent_id"*. Read literally, "connected" could mean the whole
+connected component: follow parent links in **both** directions and every transaction in the same
+tree is connected to every other, which would make `sum/10`, `sum/11` and `sum/12` all return the
+same 20000.
+
+The worked example settles it. `sum/10` is 20000 but `sum/11` is 15000, so the traversal goes
+**downward only**: a transaction plus its descendants, its own subtree. Ancestors and siblings are
+excluded. That is the reading the service implements, and the example is in the suite verbatim as
+an executable check on it.
+
 ### PUT replaces, and says which happened
 
 The specification calls `transaction_id` "identificador de una nueva transacción" and shows
