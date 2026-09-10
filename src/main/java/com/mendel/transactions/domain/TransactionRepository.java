@@ -28,7 +28,4 @@ public interface TransactionRepository {
 
     /** @return identifiers of the direct children of that transaction, in ascending order. */
     List<Long> findChildIds(long parentId);
-
-    /** Removes every transaction. Primarily a test seam for the in-memory store. */
-    void deleteAll();
 }

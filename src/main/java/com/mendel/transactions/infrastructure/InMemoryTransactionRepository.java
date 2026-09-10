@@ -86,7 +86,15 @@ public class InMemoryTransactionRepository implements TransactionRepository {
         return read(childIdsByParent, parentId);
     }
 
-    @Override
+    /**
+     * Empties the store.
+     *
+     * <p>Deliberately not on {@link TransactionRepository}: nothing the service does requires
+     * discarding every transaction, and a port should declare what its callers need rather than
+     * everything its implementation can do. It exists so tests sharing this singleton across a
+     * cached Spring context can start from a known state, and they reach it by depending on this
+     * class rather than on the port.
+     */
     public void deleteAll() {
         byId.clear();
         idsByType.clear();

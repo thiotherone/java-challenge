@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;
-import com.mendel.transactions.domain.TransactionRepository;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -20,7 +19,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("InMemoryTransactionRepository")
 class InMemoryTransactionRepositoryTest {
 
-    private TransactionRepository repository;
+    private InMemoryTransactionRepository repository;
 
     @BeforeEach
     void setUp() {

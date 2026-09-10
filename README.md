@@ -393,8 +393,13 @@ a cycle between them. It is the only write path into the store, so serializing i
   rejected with `400`. This forecloses modelling an outflow as a negative inflow, so a refund is its
   own transaction of a refund `type` rather than a sign flip; a service that later needs signed
   ledger entries would relax this rule rather than work around it.
-- **`deleteAll()` is on the port.** It is a legitimate repository operation and the seam that lets
-  integration tests reset a store that otherwise lives as long as the process.
+- **`deleteAll()` is deliberately *not* on the port.** Integration tests share one store singleton
+  across a cached Spring context, so they need to start from a known state. That could have been a
+  sixth method on `TransactionRepository`, and was at first — but a port should declare what its
+  callers need, and nothing the service does requires discarding every transaction. Putting it there
+  would have handed every consumer of the port a destructive operation to serve a test. It lives on
+  the in-memory adapter instead, and the two integration tests depend on that class rather than the
+  port. The port is now five methods, all of which production actually calls.
 - **`SaveResult` exists so the adapter can answer accurately.** The store is the only component
   that knows whether an identifier was free; returning `CREATED` or `REPLACED` is what lets the
   controller choose `201` or `200` without asking a second question and racing the answer.

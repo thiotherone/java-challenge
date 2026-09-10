@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.mendel.transactions.domain.TransactionRepository;
+import com.mendel.transactions.infrastructure.InMemoryTransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,8 +36,10 @@ class TransactionApiIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    // The concrete adapter, not the port: resetting the store is not something the port offers,
+    // and these tests are already tied to in-memory semantics.
     @Autowired
-    private TransactionRepository repository;
+    private InMemoryTransactionRepository repository;
 
     @BeforeEach
     void resetStore() {

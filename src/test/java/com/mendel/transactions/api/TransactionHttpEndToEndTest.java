@@ -3,7 +3,7 @@ package com.mendel.transactions.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
-import com.mendel.transactions.domain.TransactionRepository;
+import com.mendel.transactions.infrastructure.InMemoryTransactionRepository;
 import com.mendel.transactions.api.dto.StatusResponse;
 import com.mendel.transactions.api.dto.SumResponse;
 import java.util.List;
@@ -37,8 +37,10 @@ class TransactionHttpEndToEndTest {
     private static final ParameterizedTypeReference<List<Long>> ID_LIST =
             new ParameterizedTypeReference<>() {};
 
+    // The concrete adapter, not the port: resetting the store is not something the port offers,
+    // and these tests are already tied to in-memory semantics.
     @Autowired
-    private TransactionRepository repository;
+    private InMemoryTransactionRepository repository;
 
     private RestTestClient client;
 
