@@ -9,7 +9,7 @@ Solution to the Mendel Java Code Challenge (`docs/Java_Code_Challenge.pdf`).
 
 - **Java 21**, **Spring Boot 4.1.1**, Maven (wrapper committed)
 - **No SQL, no database** — the store is a set of concurrent in-memory indexes
-- **96 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
+- **98 tests**: domain, store, service, controller slice, full-stack integration, HTTP end-to-end
 
 ---
 
@@ -58,15 +58,41 @@ Stores a transaction under a client-chosen identifier.
 |---|---|
 | `201 Created` | The identifier was free. Carries `Location: /transactions/{id}` |
 | `200 OK` | The identifier was in use; the transaction was replaced |
-| `400 Bad Request` | Malformed JSON, missing `amount`, blank `type`, non-numeric identifier |
+| `400 Bad Request` | Malformed JSON, missing `amount`, an `amount` that is not positive, blank `type`, non-numeric identifier |
+| `405 Method Not Allowed` | A verb the resource does not support, such as `POST` |
 | `409 Conflict` | The parent link would make the transaction its own ancestor |
 | `412 Precondition Failed` | `If-None-Match: *` was sent and the identifier is already in use |
 | `415 Unsupported Media Type` | The body is not JSON |
 | `422 Unprocessable Content` | `parent_id` references a transaction that does not exist |
 
-| `405 Method Not Allowed` | A verb the resource does not support, such as `POST` |
-
 Both success cases answer with the body the specification prescribes: `{"status":"ok"}`.
+
+**Amounts must be positive.** Anything at or below zero is refused before it reaches the store:
+
+```bash
+curl -X PUT localhost:8080/transactions/1 -H 'Content-Type: application/json' \
+  -d '{"amount":0.01,"type":"cars"}'      # 201  the smallest amount that is accepted
+
+curl -X PUT localhost:8080/transactions/1 -H 'Content-Type: application/json' \
+  -d '{"amount":0,"type":"cars"}'         # 400  amount must be greater than zero
+```
+
+| Sent | Answer | `type` |
+|---|---|---|
+| `5000`, `0.01` | `201` / `200` — stored | — |
+| `0`, `-0.01`, `-5000.5` | `400` `amount must be greater than zero` | `validation-error` |
+| `null`, or the field absent | `400` `amount is required` | `validation-error` |
+| `1e400` | `400` `amount must be a finite number, but was Infinity` | `validation-error` |
+| `NaN`, `"abc"` | `400` `the request body is not valid JSON` | `malformed-request` |
+
+The last two rows are the ones worth noticing. `NaN` is not legal JSON, so it never reaches
+validation at all — the parser refuses it and it surfaces as a malformed body. `1e400` *is* legal
+JSON, overflows silently to `Infinity` when parsed as a `double`, and is caught by the finiteness
+check in the `Transaction` constructor. That check is not defensive dead code: this is the request
+that reaches it.
+
+A rejected write stores nothing: the transaction it addressed stays absent, and `GET /sum` on that
+identifier still answers `404`.
 
 **Create without replacing.** A client that must not overwrite an existing transaction says so with
 a conditional request rather than a different endpoint:

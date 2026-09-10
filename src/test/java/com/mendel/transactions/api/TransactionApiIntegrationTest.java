@@ -348,6 +348,35 @@ class TransactionApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("400 when the amount is legal JSON but overflows a double to infinity")
+        void rejectsOverflowingAmount() throws Exception {
+            // 1e400 parses fine as JSON and passes @Positive, since Infinity is greater than zero.
+            // The finiteness check in the Transaction constructor is what refuses it, which is the
+            // request that makes that check reachable rather than defensive.
+            mockMvc.perform(put("/transactions/{id}", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": 1e400, "type": "cars"}"""))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:validation-error"))
+                    .andExpect(jsonPath("$.detail").value(containsString("finite")));
+
+            mockMvc.perform(get("/transactions/sum/{id}", 10L))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("400 when the amount is not legal JSON at all")
+        void rejectsNonNumericAmount() throws Exception {
+            mockMvc.perform(put("/transactions/{id}", 10L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"amount": NaN, "type": "cars"}"""))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("urn:mendel:transactions:malformed-request"));
+        }
+
+        @Test
         @DisplayName("400 when the amount is zero")
         void rejectsZeroAmount() throws Exception {
             mockMvc.perform(put("/transactions/{id}", 10L)
