@@ -1,5 +1,6 @@
 package com.mendel.transactions.domain;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -14,6 +15,16 @@ import java.util.Optional;
  * @param parentId identifier of the parent transaction, or {@code null} when this is a root
  */
 public record Transaction(long id, double amount, String type, Long parentId) {
+
+    public Transaction {
+        Objects.requireNonNull(type, "type must not be null");
+        if (type.isBlank()) {
+            throw new IllegalArgumentException("type must not be blank");
+        }
+        if (!Double.isFinite(amount)) {
+            throw new IllegalArgumentException("amount must be a finite number, but was " + amount);
+        }
+    }
 
     /** @return the parent identifier, empty when this transaction is a root. */
     public Optional<Long> parent() {
