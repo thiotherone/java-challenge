@@ -1,4 +1,4 @@
-package com.mendel.transactions.infrastructure.web.dto;
+package com.mendel.transactions.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;

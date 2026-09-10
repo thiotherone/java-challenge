@@ -1,4 +1,4 @@
-package com.mendel.transactions.infrastructure.persistence;
+package com.mendel.transactions.infrastructure;
 
 import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;

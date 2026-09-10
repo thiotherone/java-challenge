@@ -1,12 +1,12 @@
-package com.mendel.transactions.infrastructure.web;
+package com.mendel.transactions.api;
 
-import com.mendel.transactions.application.TransactionCommandService;
-import com.mendel.transactions.application.TransactionQueryService;
+import com.mendel.transactions.service.TransactionCommandService;
+import com.mendel.transactions.service.TransactionQueryService;
 import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;
-import com.mendel.transactions.infrastructure.web.dto.StatusResponse;
-import com.mendel.transactions.infrastructure.web.dto.SumResponse;
-import com.mendel.transactions.infrastructure.web.dto.TransactionRequest;
+import com.mendel.transactions.api.dto.StatusResponse;
+import com.mendel.transactions.api.dto.SumResponse;
+import com.mendel.transactions.api.dto.TransactionRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;

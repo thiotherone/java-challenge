@@ -1,4 +1,4 @@
-package com.mendel.transactions.infrastructure.web.dto;
+package com.mendel.transactions.api.dto;
 
 /** Acknowledgement body required by the challenge specification: {@code {"status":"ok"}}. */
 public record StatusResponse(String status) {

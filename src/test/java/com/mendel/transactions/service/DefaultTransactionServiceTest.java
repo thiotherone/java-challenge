@@ -1,4 +1,4 @@
-package com.mendel.transactions.application;
+package com.mendel.transactions.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;

@@ -1,10 +1,10 @@
-package com.mendel.transactions.infrastructure.web;
+package com.mendel.transactions.api;
 
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
 
 import com.mendel.transactions.domain.TransactionRepository;
-import com.mendel.transactions.infrastructure.web.dto.StatusResponse;
-import com.mendel.transactions.infrastructure.web.dto.SumResponse;
+import com.mendel.transactions.api.dto.StatusResponse;
+import com.mendel.transactions.api.dto.SumResponse;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

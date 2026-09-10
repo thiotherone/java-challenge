@@ -1,4 +1,4 @@
-package com.mendel.transactions.application;
+package com.mendel.transactions.service;
 
 import java.util.List;
 

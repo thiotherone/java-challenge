@@ -1,4 +1,4 @@
-package com.mendel.transactions.infrastructure.web;
+package com.mendel.transactions.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,8 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.mendel.transactions.application.TransactionCommandService;
-import com.mendel.transactions.application.TransactionQueryService;
+import com.mendel.transactions.service.TransactionCommandService;
+import com.mendel.transactions.service.TransactionQueryService;
 import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;
 import com.mendel.transactions.domain.exception.CircularReferenceException;

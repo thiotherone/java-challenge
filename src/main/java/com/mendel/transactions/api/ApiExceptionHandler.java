@@ -1,4 +1,4 @@
-package com.mendel.transactions.infrastructure.web;
+package com.mendel.transactions.api;
 
 import com.mendel.transactions.domain.exception.CircularReferenceException;
 import com.mendel.transactions.domain.exception.ParentNotFoundException;

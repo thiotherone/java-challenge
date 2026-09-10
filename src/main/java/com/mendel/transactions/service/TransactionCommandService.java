@@ -1,4 +1,4 @@
-package com.mendel.transactions.application;
+package com.mendel.transactions.service;
 
 import com.mendel.transactions.domain.SaveResult;
 import com.mendel.transactions.domain.Transaction;

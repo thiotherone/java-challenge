@@ -124,27 +124,37 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details, s
 Ports and adapters. The point is that storage is an implementation detail behind an interface, so
 replacing the in-memory store touches no service code.
 
+Three layers, one package each, named so the boundary is obvious at a glance:
+
 ```
 com.mendel.transactions
-├── domain/                                  the core, free of any framework
-│   ├── Transaction                          record(id, amount, type, parentId)
-│   ├── TransactionRepository                port: what storage must provide
-│   ├── SaveResult                           CREATED | REPLACED
-│   └── exception/                           TransactionNotFound, ParentNotFound, CircularReference
-├── application/
+├── api/                                     layer 1 — HTTP, and nothing else
+│   ├── TransactionController                maps requests onto the service
+│   ├── ApiExceptionHandler                  maps failures onto status codes
+│   └── dto/                                 TransactionRequest, StatusResponse, SumResponse
+├── service/                                 layer 2 — the rules
 │   ├── TransactionCommandService            port: the write side
 │   ├── TransactionQueryService              port: the read side
-│   └── DefaultTransactionService            the rules: parent validation, cycles, traversal
-└── infrastructure/
-    ├── persistence/InMemoryTransactionRepository
-    └── web/                                 TransactionController, ApiExceptionHandler, dto/
+│   └── DefaultTransactionService            parent validation, cycles, traversal
+├── infrastructure/                          layer 3 — storage
+│   └── InMemoryTransactionRepository        the concurrent indexes
+└── domain/                                  the core the three layers share, framework-free
+    ├── Transaction                          record(id, amount, type, parentId)
+    ├── TransactionRepository                port: what storage must provide
+    ├── SaveResult                           CREATED | REPLACED
+    └── exception/                           TransactionNotFound, ParentNotFound,
+                                             CircularReference, TransactionAlreadyExists
 ```
+
+Dependencies point inward only: `api` knows `service`, `service` knows the `domain` ports, and
+`infrastructure` implements a port without anything importing it back. `domain` imports nothing of
+ours at all.
 
 How the SOLID principles actually show up here, rather than as a checklist:
 
 - **Dependency inversion** — `DefaultTransactionService` depends on the `TransactionRepository`
   port, never on the map-backed class. The direction of the arrow is what keeps the domain
-  framework-free: nothing in `domain/` or `application/` imports Spring except the `@Service`
+  framework-free: nothing in `domain/` or `service/` imports Spring except the `@Service`
   stereotype.
 - **Interface segregation** — the service is split into a command port and a query port. A caller
   that only reads does not depend on, or get to invoke, the write rules. One class implements both,
