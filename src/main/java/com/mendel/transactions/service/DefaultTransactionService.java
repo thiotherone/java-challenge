@@ -98,7 +98,10 @@ public class DefaultTransactionService implements TransactionCommandService, Tra
         if (!repository.existsById(parentId)) {
             throw new ParentNotFoundException(parentId);
         }
-        if (isDescendantOf(parentId, id)) {
+        // Only a transaction that is already stored can have descendants, so only a replacement can
+        // close a cycle. Skipping the walk for a new identifier is what keeps appending to a chain
+        // O(1) instead of O(depth), and therefore building one linear instead of quadratic.
+        if (repository.existsById(id) && isDescendantOf(parentId, id)) {
             throw new CircularReferenceException(id, parentId);
         }
     }
